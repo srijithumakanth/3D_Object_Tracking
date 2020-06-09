@@ -35,3 +35,6 @@
 .vscode/
 build/
 *.zip
+
+# DNN network weights
+*.weights
