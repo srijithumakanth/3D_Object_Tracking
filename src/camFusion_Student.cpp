@@ -144,11 +144,66 @@ void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPo
     // ...
 }
 
+// performing eucledian clustering to remove outliers in LiDAR data
+pcl::PointCloud<pcl::PointXYZ>::Ptr removeLidarOutliers (std::vector<LidarPoint>& lidarPoints)
+{
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZ>);
+    pcl::PointCloud<pcl::PointXYZ>::Ptr result(new pcl::PointCloud<pcl::PointXYZ>);
+    
+    for (const auto&pt : lidarPoints)
+    {
+        cloud->push_back(pcl::PointXYZ((float)pt.x, (float)pt.y, 0.0f));
+    }
+
+    pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ>);
+    tree->setInputCloud(cloud);
+
+    std::vector<pcl::PointIndices> clusterIndices;
+    pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
+    ec.setClusterTolerance (0.05); 
+    ec.setMinClusterSize (3); // 3
+    // ec.setMaxClusterSize (15);
+    ec.setSearchMethod (tree);
+    ec.setInputCloud (cloud);
+    ec.extract (clusterIndices);
+
+    if (clusterIndices.empty())
+    {
+        return result;
+    }
+
+    for (auto& getIndices : clusterIndices)
+    {
+        for (int i : getIndices.indices)
+        {
+            result->points.push_back(cloud->points.at(i));
+        }
+    }
+
+    return result;
+}
 
 void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev,
                      std::vector<LidarPoint> &lidarPointsCurr, double frameRate, double &TTC)
 {
-    // ...
+    double dT = 1 / frameRate;
+    double minPrevX = 1e9;
+    double minCurrX = 1e9;
+
+    pcl::PointCloud<pcl::PointXYZ>::Ptr prevLidarCloud = removeLidarOutliers(lidarPointsPrev);
+    pcl::PointCloud<pcl::PointXYZ>::Ptr currLidarCloud = removeLidarOutliers(lidarPointsCurr);
+
+    for (const auto& pt : prevLidarCloud->points)
+    {
+        minPrevX = minPrevX > pt.x ? pt.x : minPrevX;
+    }
+
+    for (const auto& pt : currLidarCloud->points)
+    {
+        minCurrX = minCurrX > pt.x ? pt.x : minCurrX;
+    }
+
+    TTC = (minCurrX * dT) / (minPrevX - minCurrX);
 }
 
 
@@ -158,19 +213,23 @@ void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bb
 
     for (auto& match : matches) // loop through all the matched descriptors
     {
-        cv::KeyPoint prevPoint = prevFrame.keypoints[match.queryIdx];
-        cv::KeyPoint currPoint = currFrame.keypoints[match.trainIdx];
+        // cv::KeyPoint prevPoint = prevFrame.keypoints[match.queryIdx];
+        cv::Point prevPoint = prevFrame.keypoints.at(match.queryIdx).pt;
+        // cv::KeyPoint currPoint = currFrame.keypoints[match.trainIdx];
+        cv::Point currPoint = currFrame.keypoints.at(match.trainIdx).pt;
 
         for(auto& bboxInPrev : prevFrame.boundingBoxes)
         {
-            if (!bboxInPrev.roi.contains(prevPoint.pt))
+            // if (!bboxInPrev.roi.contains(prevPoint.pt))
+            if (!bboxInPrev.roi.contains(prevPoint))
             {
                 continue;
             }
 
             for (auto& bboxInCurr : currFrame.boundingBoxes)
             {
-                if(!bboxInCurr.roi.contains(currPoint.pt))
+                // if(!bboxInCurr.roi.contains(currPoint.pt))
+                if(!bboxInCurr.roi.contains(currPoint))
                 {
                     continue;
                 }
@@ -196,7 +255,7 @@ void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bb
         std::set<int> matchedPrevBoxes; // to avoid already matched previous bounding boxes
         
         bbBestMatches.clear();
-        for (auto& t : bbBestMatches)
+        for (auto& t : bboxMatches)
         {
             if (matchedPrevBoxes.count(std::get<0>(t))) // If already matched bbox exist, then continue(to avoid repetation)
             {
@@ -205,6 +264,8 @@ void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bb
 
             matchedPrevBoxes.insert(std::get<0>(t));
             bbBestMatches.insert(std::make_pair(std::get<0>(t), std::get<1>(t)));
+            std::cout << "Matching Bounding Boxes Complete"  << std::endl;
+
         }
     }
 }
