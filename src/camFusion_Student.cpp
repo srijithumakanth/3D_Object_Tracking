@@ -154,5 +154,57 @@ void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev,
 
 void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bbBestMatches, DataFrame &prevFrame, DataFrame &currFrame)
 {
-    // ...
+    std::map <std::pair<int,int>, int> bbMatchCounter; // [(bbInPrevID, bbInCurreID), numOfOccurences]
+
+    for (auto& match : matches) // loop through all the matched descriptors
+    {
+        cv::KeyPoint prevPoint = prevFrame.keypoints[match.queryIdx];
+        cv::KeyPoint currPoint = currFrame.keypoints[match.trainIdx];
+
+        for(auto& bboxInPrev : prevFrame.boundingBoxes)
+        {
+            if (!bboxInPrev.roi.contains(prevPoint.pt))
+            {
+                continue;
+            }
+
+            for (auto& bboxInCurr : currFrame.boundingBoxes)
+            {
+                if(!bboxInCurr.roi.contains(currPoint.pt))
+                {
+                    continue;
+                }
+
+                bbMatchCounter[std::make_pair(bboxInPrev.boxID, bboxInCurr.boxID)]++;
+            }
+        }
+
+        std::vector<std::tuple<int, int, int>> bboxMatches;
+
+        // lambda expresseion to add prevBoxID, currBoxID, numOfOccurences into bboxMatches vector of tuples
+        std::for_each(bbMatchCounter.begin(), bbMatchCounter.end(), [&bboxMatches](std::pair<std::pair<int,int>, int> pair)
+        {
+            bboxMatches.emplace_back(pair.first.first, pair.first.second, pair.second);
+        });
+
+        // lambda expression to sort the vector of tuples in descending order of numOfOccurences
+        std::sort(bboxMatches.begin(), bboxMatches.end(), [](const std::tuple<int, int, int>&a, const std::tuple<int,int,int>&b )
+        {
+            return (std::get<2>(a) > std::get<2>(b));
+        });
+
+        std::set<int> matchedPrevBoxes; // to avoid already matched previous bounding boxes
+        
+        bbBestMatches.clear();
+        for (auto& t : bbBestMatches)
+        {
+            if (matchedPrevBoxes.count(std::get<0>(t))) // If already matched bbox exist, then continue(to avoid repetation)
+            {
+                continue;
+            }
+
+            matchedPrevBoxes.insert(std::get<0>(t));
+            bbBestMatches.insert(std::make_pair(std::get<0>(t), std::get<1>(t)));
+        }
+    }
 }
