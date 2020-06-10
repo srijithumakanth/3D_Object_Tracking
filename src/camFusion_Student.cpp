@@ -95,7 +95,17 @@ void show3DObjects(std::vector<BoundingBox> &boundingBoxes, cv::Size worldSize, 
             right = right>x ? right : x;
 
             // draw individual point
-            cv::circle(topviewImg, cv::Point(x, y), 4, currColor, -1);
+            // draw individual point
+            if(it2==it1->lidarPoints.begin())
+            {
+              cv::circle(topviewImg, cv::Point(x, y), 6, cv::Scalar(0, 0, 255), -1);
+            }
+            else
+            {
+                cv::circle(topviewImg, cv::Point(x, y), 4, currColor, -1);
+
+            }
+            
         }
 
         // draw enclosing rectangle
@@ -125,7 +135,7 @@ void show3DObjects(std::vector<BoundingBox> &boundingBoxes, cv::Size worldSize, 
 
     if(bWait)
     {
-        cv::waitKey(0); // wait for key to be pressed
+        cv::waitKey(1); // wait for key to be pressed
     }
 }
 

@@ -27,4 +27,5 @@ void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev,
 
 pcl::PointCloud<pcl::PointXYZ>::Ptr removeLidarOutliers (std::vector<LidarPoint>& lidarPoints);
 
+
 #endif /* camFusion_hpp */
