@@ -136,6 +136,7 @@ void clusterKptMatchesWithROI(BoundingBox &boundingBox, std::vector<cv::KeyPoint
     // calculate mean point match distance
     double meanDistance = 0.0;
     double size = 0.0;
+
     for (auto it1 = kptMatches.begin(); it1 != kptMatches.end();  ++it1)
     {
         cv::KeyPoint currPoint = kptsCurr[it1->trainIdx];
@@ -148,6 +149,8 @@ void clusterKptMatchesWithROI(BoundingBox &boundingBox, std::vector<cv::KeyPoint
         }
     }
     meanDistance = meanDistance / size;
+    cout << " meanDistance: " << meanDistance << std::endl;
+    
 
     // filter out points based on the mean distance
     for (auto it2 = kptMatches.begin(); it2 != kptMatches.end(); ++it2)
@@ -158,11 +161,15 @@ void clusterKptMatchesWithROI(BoundingBox &boundingBox, std::vector<cv::KeyPoint
         if (boundingBox.roi.contains(currPoint.pt))
         {
             double currDistance = cv::norm(currPoint.pt - prevPoint.pt);
+            double scaledMeanDistance = meanDistance * 1.3;
+            // cout << " currDistance: " << currDistance << std::endl;
+            // cout << " scaledMeanDistance: " << scaledMeanDistance << std::endl;
 
-            if (currDistance < meanDistance * 1.3)
+            if (currDistance < scaledMeanDistance)
             {
                 boundingBox.keypoints.push_back(currPoint);
                 boundingBox.kptMatches.push_back(*it2);
+                // cout << " BBox kptsMatches.size(): " << boundingBox.kptMatches.size() << std::endl;
             }
         }
     }
@@ -173,7 +180,49 @@ void clusterKptMatchesWithROI(BoundingBox &boundingBox, std::vector<cv::KeyPoint
 void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPoint> &kptsCurr, 
                       std::vector<cv::DMatch> kptMatches, double frameRate, double &TTC, cv::Mat *visImg)
 {
-    // ...
+    // calculate sitance ratio between all matches
+    vector<double> distRatios;
+    double minDist = 100.0; // minimum required distance
+    double dT = 1 / frameRate;
+
+    for (auto it1 = kptMatches.begin(); it1 != kptMatches.end(); ++it1)
+    {
+        cv::KeyPoint currPointOuter = kptsCurr[it1->trainIdx];
+        // cv::KeyPoint currPointOuter = kptsCurr.at(it1->trainIdx);
+        cv::KeyPoint prevPointOuter = kptsPrev[it1->queryIdx];
+        // cv::KeyPoint prevPointOuter = kptsPrev.at(it1->queryIdx);
+
+        for (auto it2 = kptMatches.begin(); it2 != kptMatches.end(); ++it2)
+        {
+            // calculate the current distance
+            cv::KeyPoint currPointInner = kptsCurr[it2->trainIdx];
+            // cv::KeyPoint currPointInner = kptsCurr.at(it2->trainIdx);
+            cv::KeyPoint prevPointInner = kptsPrev[it2->queryIdx];
+            // cv::KeyPoint prevPointInner = kptsPrev.at(it2->queryIdx);
+
+            double distCurr = cv::norm(currPointOuter.pt - currPointInner.pt);
+            double distPrev = cv::norm(prevPointOuter.pt - prevPointInner.pt);
+
+            if (distPrev >  std::numeric_limits<double>::epsilon() && distCurr >= minDist)
+            {
+                double distRatio = distCurr / distPrev;
+                distRatios.push_back(distRatio);
+            }
+        } // eof inner loop
+    } // eof outer loop
+
+    if (distRatios.size() == 0)
+    {
+        TTC = NAN;
+        return;
+    }
+
+    std::sort(distRatios.begin(), distRatios.end());
+    long medianIndex = floor(distRatios.size() / 2.0);
+
+    double medianDistRatio = distRatios.size() % 2 == 0 ? (distRatios[medianIndex - 1] + distRatios[medianIndex]) / 2 : distRatios[medianIndex];
+
+    TTC = -dT / (1 - medianDistRatio); 
 }
 
 // performing eucledian clustering to remove outliers in LiDAR data
@@ -296,7 +345,7 @@ void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bb
 
             matchedPrevBoxes.insert(std::get<0>(t));
             bbBestMatches.insert(std::make_pair(std::get<0>(t), std::get<1>(t)));
-            std::cout << "Matching Bounding Boxes Complete"  << std::endl;
+            // std::cout << "Matching Bounding Boxes Complete"  << std::endl;
 
         }
     }
