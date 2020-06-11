@@ -300,6 +300,20 @@ if (distRatios.size() == 0)
 }
 
 ```
+---
+### FP.5 Performance Evaluation 1:
+Find examples where the TTC estimate of the Lidar sensor does not seem plausible. Describe your observations and provide a sound argumentation why you think this happened.
+
+---
+
+<figure>
+    <img  src="images/FinalResultsFast.gif" alt="Drawing" style="width: 500px;"/>
+</figure>
+
+### Explanation:
+As shown in the above gif, few things to observe:
+
+1. 
 
 ### Deal with outlier correspondences
 Both Harris and ORB detectors shows much more outliers than other keypoint detector:
