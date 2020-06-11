@@ -155,104 +155,152 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr removeLidarOutliers (std::vector<LidarPoint>
   return result;
 }
 ```
+The following figure shows the outlier removed:
+
+<figure>
+    <img  src="images/LiDAR_points.png" alt="Drawing" style="width: 800px;"/>
+</figure>
+
 ---
 
-## TASK.2 Compute Lidar-based TTC
+### FP.3 Associate Keypoint Correspondences with Bounding Boxes:
 
 ---
-Compute the time-to-collision in second for all matched 3D objects using only Lidar measurements from the matched bounding boxes between current and previous frame. Find a method to handle those outliers
+Prepare the TTC computation based on camera measurements by associating keypoint correspondences to the bounding boxes which enclose them. All matches which satisfy this condition must be added to a vector in the respective bounding box.
 
 ---
-For this task, I changed **LidarPoint** struct by overloading "<" operator, so that LiarPoint will be sorted based on X value.
+**Steps:**
+1. Calculate the mean point match distance.
+2. Loop through all the keypoint matches and calculate the mean distance of those keypoints between the previous and the current frames.
+3. Filter out the keypoints based to the computed mean distance from Step - 2
+---
+
+_Step - 1 and Step - 2:_
 
 ```C++
-struct LidarPoint { // single lidar point in space
-    double x,y,z,r; // x,y,z in [m], r is point reflectivity
-    bool operator < (const LidarPoint& pt) const
+// associate a given bounding box with the keypoints it contains
+void clusterKptMatchesWithROI(BoundingBox &boundingBox, std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPoint> &kptsCurr, std::vector<cv::DMatch> &kptMatches)
+{
+    // calculate mean point match distance
+    double meanDistance = 0.0;
+    double size = 0.0;
+
+    for (auto it1 = kptMatches.begin(); it1 != kptMatches.end();  ++it1)
     {
-      return x < pt.x;
+        cv::KeyPoint currPoint = kptsCurr[it1->trainIdx];
+        cv::KeyPoint prevPoint = kptsPrev[it1->queryIdx];
+
+        if (boundingBox.roi.contains(currPoint.pt))
+        {
+            meanDistance += cv::norm(currPoint.pt - prevPoint.pt);
+            size += 1;
+        }
     }
-};
-
+    meanDistance = meanDistance / size;
+    cout << " meanDistance: " << meanDistance << std::endl;
+  
 ```
-
-Function **computeTTCLidar()** become much simpler by overloading "<" operator for LidarPoint struct, after sorting lidar point, **lidarPointsPrev.begin()** is the element closest to Lidar sensor
+_Step - 3:_
 
 ```C++
-void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev,
-                     std::vector<LidarPoint> &lidarPointsCurr, double frameRate, double &TTC)
-{
-    double minXPrev = 1e9, minXCurr = 1e9;
-    minXPrev = lidarPointsPrev.begin()->x;
-    minXCurr = lidarPointsCurr.begin()->x;
-    TTC = minXCurr  / (minXPrev - minXCurr+1e-6)/frameRate;
-}
-```
-
-### Handling Outliers
-
-3. In the following figure, I highlight the first outlier point in red. With sorting of lidar points, those outliers are located at the beginning part of lidarpoint vector. 
-
-<figure>
-    <img  src="images/fig4.png" alt="Drawing" style="width: 800px;"/>
-</figure>
-
-The way taken to remove outliers is  to use the **IQR range values**. That is, all the lidarpoints with x value less than **Q1 - 1.5*IQR** are removed.
-
-```C++
-void removeOutlier(std::vector<LidarPoint> &lidarPoints)
-{
-  sort(lidarPoints.begin(),lidarPoints.end());
-  long medIdx = floor(lidarPoints.size()/2.0);
-  long medianPtindex = lidarPoints.size()%2==0?medIdx -1 :medIdx;
-
-  long Q1Idx = floor(medianPtindex/2.0);
-  double Q1 = medianPtindex%2==0?(lidarPoints[Q1Idx -1].x +lidarPoints[Q1Idx].x)/2.0:lidarPoints[Q1Idx].x;
-  auto it=lidarPoints.begin();
-  while(it!=lidarPoints.end())
-  {
-    if(it->x < Q1)
+   // filter out points based on the mean distance
+    for (auto it2 = kptMatches.begin(); it2 != kptMatches.end(); ++it2)
     {
-      it = lidarPoints.erase(it);
-    }else{break;}
-  }
+        cv::KeyPoint currPoint = kptsCurr[it2->trainIdx];
+        cv::KeyPoint prevPoint = kptsPrev[it2->queryIdx];
+
+        if (boundingBox.roi.contains(currPoint.pt))
+        {
+            double currDistance = cv::norm(currPoint.pt - prevPoint.pt);
+            double scaledMeanDistance = meanDistance * 1.3;
+            // cout << " currDistance: " << currDistance << std::endl;
+            // cout << " scaledMeanDistance: " << scaledMeanDistance << std::endl;
+
+            if (currDistance < scaledMeanDistance)
+            {
+                boundingBox.keypoints.push_back(currPoint);
+                boundingBox.kptMatches.push_back(*it2);
+                // cout << " BBox kptsMatches.size(): " << boundingBox.kptMatches.size() << std::endl;
+            }
+        }
+    }
 }
-
 ```
-
-The following figure shows the outlier appeared in the above figure is removed and the new nearest lidar point location is changed
-
-<figure>
-    <img  src="images/fig41.png" alt="Drawing" style="width: 800px;"/>
-</figure>
-
-
-### Lidar-based TTC:
-
-
-<table><tr>
-<td><figure>
-    <img  src="images/ttc_lidar_with_outlier.png" alt="Drawing" style="width: 500px;" />
-    <figcaption>With Outliers</figcaption>
-    </figure></td>
-<td><figure>
-    <img  src="images/ttc_lidar_without_outlier.png" alt="Drawing" style="width: 500px;"/>     
-    <figcaption>Outliers removed</figcaption></figure></td>
-</tr></table>
-
-
-
-The following animation shows the lidar point projected to 2D image with nearest lidar point highlighted in red. It can be observed that the nearest lidar point location is **not** fixe, but moving around, which can cause lidar-based TTC to have big variation and even outliers 
-
-<figure>
-        <img  src="images/TTC.gif" alt="Drawing" style="width: 800px;"/>    
-</figure>
-
 ---
-## TASK.4 Compute Camera-based TTC
+### FP.4 Compute Camera-based TTC:
 Compute the time-to-collision in second for all matched 3D objects using only keypoint correspondences from the matched bounding boxes between current and previous frame.
 
 ---
+
+**Steps:**
+1. Loop through the keypointmatches twice.
+2. Calculate the mean distance for both frames (previous and current) between two time steps.
+3. Using the computed distances in Step - 2, calculate the distance ratio and push_back it to the ```distRatios``` vector.
+4. Sort the ```distRatios``` vector and calculate the meadian distance ratio. This step is done to avoid any kind of statistical outliers.
+5. Compute the Camera TTC and return it to the main function.
+
+---
+
+_Step - 1 and Step - 2:_
+
+```C++
+// Compute time-to-collision (TTC) based on keypoint correspondences in successive images
+void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPoint> &kptsCurr, 
+                      std::vector<cv::DMatch> kptMatches, double frameRate, double &TTC, cv::Mat *visImg)
+{
+    // calculate sitance ratio between all matches
+    vector<double> distRatios;
+    double minDist = 100.0; // minimum required distance
+    double dT = 1 / frameRate;
+
+    for (auto it1 = kptMatches.begin(); it1 != kptMatches.end(); ++it1)
+    {
+        cv::KeyPoint currPointOuter = kptsCurr[it1->trainIdx];
+        // cv::KeyPoint currPointOuter = kptsCurr.at(it1->trainIdx);
+        cv::KeyPoint prevPointOuter = kptsPrev[it1->queryIdx];
+        // cv::KeyPoint prevPointOuter = kptsPrev.at(it1->queryIdx);
+
+        for (auto it2 = kptMatches.begin(); it2 != kptMatches.end(); ++it2)
+        {
+            // calculate the current distance
+            cv::KeyPoint currPointInner = kptsCurr[it2->trainIdx];
+            // cv::KeyPoint currPointInner = kptsCurr.at(it2->trainIdx);
+            cv::KeyPoint prevPointInner = kptsPrev[it2->queryIdx];
+            // cv::KeyPoint prevPointInner = kptsPrev.at(it2->queryIdx);
+
+            double distCurr = cv::norm(currPointOuter.pt - currPointInner.pt);
+            double distPrev = cv::norm(prevPointOuter.pt - prevPointInner.pt);
+```
+_Step-3:_
+
+```C++
+ if (distPrev >  std::numeric_limits<double>::epsilon() && distCurr >= minDist)
+            {
+                double distRatio = distCurr / distPrev;
+                distRatios.push_back(distRatio);
+            }
+        } // eof inner loop
+    } // eof outer loop
+```
+_Step - 4 and Step - 5:_
+
+```C++
+if (distRatios.size() == 0)
+    {
+        TTC = NAN;
+        return;
+    }
+
+    std::sort(distRatios.begin(), distRatios.end());
+    long medianIndex = floor(distRatios.size() / 2.0);
+
+    double medianDistRatio = distRatios.size() % 2 == 0 ? (distRatios[medianIndex - 1] + distRatios[medianIndex]) / 2 : distRatios[medianIndex];
+
+    TTC = -dT / (1 - medianDistRatio); 
+}
+
+```
+
 ### Deal with outlier correspondences
 Both Harris and ORB detectors shows much more outliers than other keypoint detector:
 
