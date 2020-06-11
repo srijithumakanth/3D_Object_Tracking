@@ -1,144 +1,162 @@
 # Track an Object in 3D Space
 
-## TASK.1 Match 3D Objects
-##  TASK.3 Associate Keypoint Correspondences with Bounding Boxes
+### FP.1 Match 3D Objects:    
 
-
-    Task FP.1 and FP.3 are both implemented in the function of matchBoundingBoxes()
-
-
----
-
-### TASK.1:    
-
-Implement the method **matchBoundingBoxes()**, which takes as input both the previous and the current data frames and provides as output the ids of the matched regions of interest (i.e. the boxID property). Matches must be the ones with the highest number of keypoint correspondences.
+Implement the method ```matchBoundingBoxes()```, which takes as input both the previous and the current data frames and provides as output the ids of the matched regions of interest (i.e. the boxID property). Matches must be the ones with the highest number of keypoint correspondences.
 
 ---
 **Steps:**
-1. Loop through all the bounding boxes in the current frame
-2. Loop through all the matching points, and check wthether the matching point is within the current box. If it is, the corresponding box ID in the previous frame, which includes the matched point, is checked and counted.
-3. After step 1 and 2, each box in the current frame is matched to 0, 1 or multiple matched boxes from the previous frame, the box having the highest number of keypoint correspondences is picked as the final matched one for the current box 
-4. After boxes are matched, the associate keypoints and kptMatches are re-assigned to both boxes (Task FP.3)
-
-    matching points: keypoints[it2->trainIdx]    
-    matched points: keypoints[it2->queryIdx]
-
+1. Create a map name ```bbMatchCounter``` of ID's of bounding boxes in previous freame and this frame along with its number of occurences.
+2. Loop through all the matched descriptors and check wthether the matching points are within the current box. If it is, the corresponding box ID in the previous frame, which includes the matched point as well as box ID of current frame is added in the map and the number of occurences are incremented.
+3. Filter out bounding box matches on both frames based of the number of occurences as computed in Step - 2 
+4. Best bounding box matches are returned to the main function.
 ---
 
-**matchBoundingBoxes():**  
-_Loop through all the bounding boxes in the current frame_
+```matchBoundingBoxes():```  
+_Step - 1:_
 
 ```C++
-for(auto it1 = currFrame.boundingBoxes.begin(); it1!=currFrame.boundingBoxes.end(); ++it1)
-    {              
-      map<int,int> tmpMatchedBoxes; //map<pre_BoxID, # of matched KeyPoints in pre_Box>
+std::map <std::pair<int,int>, int> bbMatchCounter; // [(bbInPrevID, bbInCurreID), numOfOccurences]
 ```
-_Loop through all the matching points_
-
-
-```C++      
-      for(auto it2 = matches.begin(); it2!=matches.end(); ++it2)  //loop through all matched points
-      {
-        cv::KeyPoint currPt =currFrame.keypoints[it2->trainIdx] ;
-```
-_If current box contains this matching point currPt, the boxID containing matched point prevPt in the previous frame needs to be found out as showing below_
-       
+_Step - 2:_
 ```C++       
-        if(it1->roi.contains(currPt.pt)){
-          cv::KeyPoint prevPt =prevFrame.keypoints[it2->queryIdx] ;
-          for(auto it3 = prevFrame.boundingBoxes.begin();
-                   it3!=prevFrame.boundingBoxes.end();++it3)
-          {
+for (auto& match : matches) // loop through all the matched descriptors
+{
+  // cv::KeyPoint prevPoint = prevFrame.keypoints[match.queryIdx];
+  cv::Point prevPoint = prevFrame.keypoints.at(match.queryIdx).pt;
+  // cv::KeyPoint currPoint = currFrame.keypoints[match.trainIdx];
+  cv::Point currPoint = currFrame.keypoints.at(match.trainIdx).pt;
 
-```
-_If the box in the previous frame contains the matched point prevPt, record this box ID and how many times it has matched points_       
-```C++               
-            if(it3->roi.contains(prevPt.pt))
-            {
-              int boxId = it3->boxID;
-              auto it_tmp = tmpMatchedBoxes.find(boxId);
-              if(it_tmp==tmpMatchedBoxes.end())
-              {tmpMatchedBoxes.insert(make_pair(boxId, 1));}
-              else{
-                tmpMatchedBoxes[boxId] +=1;
-              }
-            }
-          }
-        }
-      }
-```
-_Now each boxes in the current frame could have 0, 1 or multiple matched boxes from the previous frame,the box having the highest number of keypoint correspondences is picked as the final matching box for the current box_       
-```C++  
-    int bestMatchBox = -1;
-    int bestMatchValue = 0;
-    for(auto it=tmpMatchedBoxes.begin();it!=tmpMatchedBoxes.end();++it)
+  for(auto& bboxInPrev : prevFrame.boundingBoxes)
+  {
+    // if (!bboxInPrev.roi.contains(prevPoint.pt))
+    if (!bboxInPrev.roi.contains(prevPoint))
     {
-      if(it->second>bestMatchValue)
-      {
-        bestMatchBox = it->first;
-        bestMatchValue = it->second;
-      }
+      continue;
     }
-      bbBestMatches.insert(pair<int,int>(bestMatchBox,it1->boxID));
+
+    for (auto& bboxInCurr : currFrame.boundingBoxes)
+    {
+      // if(!bboxInCurr.roi.contains(currPoint.pt))
+      if(!bboxInCurr.roi.contains(currPoint))
+      {
+        continue;
+      }
+
+      bbMatchCounter[std::make_pair(bboxInPrev.boxID, bboxInCurr.boxID)]++;
+    }
+}
+
 ```
+_Step - 3 and Step - 4:_       
+```C++               
+std::vector<std::tuple<int, int, int>> bboxMatches;
 
+// lambda expresseion to add prevBoxID, currBoxID, numOfOccurences into bboxMatches vector of tuples
+std::for_each(bbMatchCounter.begin(), bbMatchCounter.end(), [&bboxMatches](std::pair<std::pair<int,int>, int> pair)
+{
+    bboxMatches.emplace_back(pair.first.first, pair.first.second, pair.second);
+});
+
+// lambda expression to sort the vector of tuples in descending order of numOfOccurences
+std::sort(bboxMatches.begin(), bboxMatches.end(), [](const std::tuple<int, int, int>&a, const std::tuple<int,int,int>&b )
+{
+    return (std::get<2>(a) > std::get<2>(b));
+});
+
+std::set<int> matchedPrevBoxes; // to avoid already matched previous bounding boxes
+
+bbBestMatches.clear();
+for (auto& t : bboxMatches)
+{
+    if (matchedPrevBoxes.count(std::get<0>(t))) // If already matched bbox exist, then continue(to avoid repetation)
+    {
+        continue;
+    }
+
+    matchedPrevBoxes.insert(std::get<0>(t));
+    bbBestMatches.insert(std::make_pair(std::get<0>(t), std::get<1>(t)));
+    // std::cout << "Matching Bounding Boxes Complete"  << std::endl;
+```
+---
+### FP.2 Compute Lidar-based TTC:
+
+Compute the time-to-collision in second for all matched 3D objects using only Lidar measurements from the matched bounding boxes between current and previous frame.
 
 ---
-### TASK.3:
-
-Prepare the TTC computation based on camera measurements by associating keypoint correspondences to the bounding boxes which enclose them. All matches which satisfy this condition must be added to a vector in the respective bounding box.
-    
+**Steps:**
+1. The raw LiDAR data is filtered to remove any outliers.
+2. The minimum values in X-direction (driving direction) are set to some large value and then the filtered LiDAR cloud in both current and previous frames are ranged appropiately.
+3. Filtering is performed by first converting the LiDAR data to a ```pcl::PointXYZ``` format and then performing an Euclidean Clustering. 
+4. Finally the computed LiDAR TTC is retured to the main function.
 ---
-
-As mentioned in FP.1, matches between boxes are defined as the ones with the highest number of keypoint correspondences, meaning some keypoints contained by a bounding box in the current frame are not included in its corresponding box in the previous frame. The following figure shows such a case: some keypoints pointed by the red arrow are enclosed by the current box, but not included by its corresponding box in the previous frame:
-
-<figure>
-    <img  src="images/fig1.png" alt="Drawing" style="width: 1000px;"/>
-</figure>
-
-Those matched keypoints not included by both boxes need to be removed.
-
 
 ```C++
-      std::vector<BoundingBox>::iterator it3;
-      for( it3 = prevFrame.boundingBoxes.begin(); it3 != prevFrame.boundingBoxes.end();++it3)
-      {
-        if(it3->boxID == bestMatchBox)  //to find out bounding box in the previous frame based on boxID
-        break;
-      }
-      it1->kptMatches.clear(); 
-      it1->keypoints.clear();
-      it3->keypoints.clear();
-      for(auto it2 = matches.begin();it2!=matches.end();++it2)
-      {
-        cv::KeyPoint currPt =currFrame.keypoints[it2->trainIdx] ;
-        cv::KeyPoint prevPt =prevFrame.keypoints[it2->queryIdx] ;
+void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev,
+                     std::vector<LidarPoint> &lidarPointsCurr, double frameRate, double &TTC)
+{
+  double dT = 1 / frameRate;
+  double minPrevX = 1e9;
+  double minCurrX = 1e9;
+
+  pcl::PointCloud<pcl::PointXYZ>::Ptr prevLidarCloud = removeLidarOutliers(lidarPointsPrev);
+  pcl::PointCloud<pcl::PointXYZ>::Ptr currLidarCloud = removeLidarOutliers(lidarPointsCurr);
+
+  for (const auto& pt : prevLidarCloud->points)
+  {
+      minPrevX = minPrevX > pt.x ? pt.x : minPrevX;
+  }
+
+  for (const auto& pt : currLidarCloud->points)
+  {
+      minCurrX = minCurrX > pt.x ? pt.x : minCurrX;
+  }
+
+  TTC = (minCurrX * dT) / (minPrevX - minCurrX);
+}
 ```
-_Only record those matched points contained by both boxes_
 ```C++
-        if(it1->roi.contains(currPt.pt)  && it3->roi.contains(prevPt.pt))
-        {
-          it1->kptMatches.push_back(*it2);
-          it1->keypoints.push_back(currPt);
-          it3->keypoints.push_back(prevPt);
-        }
+// performing eucledian clustering to remove outliers in LiDAR data
+pcl::PointCloud<pcl::PointXYZ>::Ptr removeLidarOutliers (std::vector<LidarPoint>& lidarPoints)
+{
+  pcl::PointCloud<pcl::PointXYZ>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZ>);
+  pcl::PointCloud<pcl::PointXYZ>::Ptr result(new pcl::PointCloud<pcl::PointXYZ>);
+  
+  for (const auto&pt : lidarPoints)
+  {
+      cloud->push_back(pcl::PointXYZ((float)pt.x, (float)pt.y, 0.0f));
+  }
+
+  pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ>);
+  tree->setInputCloud(cloud);
+
+  std::vector<pcl::PointIndices> clusterIndices;
+  pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
+  ec.setClusterTolerance (0.05); 
+  ec.setMinClusterSize (3); // 3
+  // ec.setMaxClusterSize (15);
+  ec.setSearchMethod (tree);
+  ec.setInputCloud (cloud);
+  ec.extract (clusterIndices);
+
+  if (clusterIndices.empty())
+  {
+      return result;
+  }
+
+  for (auto& getIndices : clusterIndices)
+  {
+      for (int i : getIndices.indices)
+      {
+          result->points.push_back(cloud->points.at(i));
       }
+  }
+
+  return result;
+}
 ```
-
-The following figure shows improved keypoint correspondences of figure 1
-<figure>
-    <img  src="images/fig2.png" alt="Drawing" style="width: 1000px;"/>
-</figure>
-
-The following figure shows keypoint correspondences for the bounding boxes:
-
-<figure>
-    <img  src="images/boxmatch.gif" alt="Drawing" style="width: 2000px;"/>
-</figure>
-
-
-
 ---
+
 ## TASK.2 Compute Lidar-based TTC
 
 ---
