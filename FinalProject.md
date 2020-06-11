@@ -311,7 +311,7 @@ Find examples where the TTC estimate of the Lidar sensor does not seem plausible
 1. Filtering of the LiDAR data is key to get reliable TTC from just LiDAR sensor.
 
 <figure>
-    <img  src="images/TTC_UnFiltered_LiDAR.png" alt="Drawing" style="width: 500px;"/>
+    <img  src="images/TTC_Unfiltered_LiDAR.png" alt="Drawing" style="width: 500px;"/>
 </figure>
 As shown in the figure above, we do get negative TTC readings from the LiDAR if it is not filtered.
 <figure>
