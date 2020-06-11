@@ -328,6 +328,61 @@ As shown in the figure above, we do get negative TTC readings from the LiDAR if 
 Run several detector / descriptor combinations and look at the differences in TTC estimation. Find out which methods perform best and also include several examples where camera-based TTC estimation is way off. As with Lidar, describe your observations again and also look into potential reasons.
 
 ---
+Several Keypoint Detector / Descriptor combinations were tested by modiying the ```main()``` as shown below and their respective TTC computations were recorded in a spreadsheet for performance evaluations.
+
+```C++
+for(auto detType: Detectors) //Loop Over Detector
+    {
+        for(auto descType: Descriptors) //Loop Over Descritpor
+        {
+            boost::circular_buffer<DataFrame> dataBuffer(dataBufferSize); // list of data frames which are held in memory at the same time
+            
+            map<int, double> ttc_Camera;
+            cout<<"***************************************************Detector: "<<detType<<"  ***********descriptor: "<<descType;
+            if(detType.compare("SIFT")==0 && descType.compare("ORB")==0) continue;
+            if(detType.compare("AKAZE")!=0 && descType.compare("AKAZE")==0) continue;
+            ......
+            ......
+            ......
+            ......
+             }
+
+            } // eof loop over all images
+
+            ttc << detType<<"_"<<descType;
+
+            for (size_t imgIndex = 1; imgIndex <= imgEndIndex - imgStartIndex; imgIndex+=imgStepWidth)
+            {
+                if(ttc_Camera.find(imgIndex)==ttc_Camera.end())
+                {
+                    ttc<< "," <<"inf";
+                }else{
+                    ttc<< "," <<ttc_Camera[imgIndex];
+                }
+            }
+            ttc<<endl;
+        }
+    }
+    ttc << "LiDAR";
+
+    for (size_t imgIndex = 1; imgIndex <= imgEndIndex - imgStartIndex; imgIndex+=imgStepWidth)
+    {
+        if(ttc_Lidar.find(imgIndex)==ttc_Lidar.end())
+        {
+            ttc<< "," <<"inf";
+        }else{
+            ttc<< "," <<ttc_Lidar[imgIndex];
+        }
+    }
+    ttc<<endl;
+    ttc.close();
+    cout<<endl;
+
+    return 0;
+}
+
+
+```
 ### Explanation:
 1. As shown in the gif below, a camera LiDAR fusion is performed and Time to Collison (TTC) for both the LiDAR and Camera is calculated. Few things to observe:
 
