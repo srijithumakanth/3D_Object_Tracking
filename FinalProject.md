@@ -306,135 +306,53 @@ Find examples where the TTC estimate of the Lidar sensor does not seem plausible
 
 ---
 
-<figure>
-    <img  src="images/FinalResultsFast.gif" alt="Drawing" style="width: 500px;"/>
-</figure>
-
 ### Explanation:
-As shown in the above gif, few things to observe:
 
-1. 
-
-### Deal with outlier correspondences
-Both Harris and ORB detectors shows much more outliers than other keypoint detector:
-
-#### Before improvement:
-
-**HARRIS:**
+1. Filtering of the LiDAR data is key to get reliable TTC from just LiDAR sensor.
 
 <figure>
-    <img  src="images/ttc_Harris_100.png" alt="Drawing" style="width: 500px;"/>
+    <img  src="images/TTC_UnFiltered_LiDAR.png" alt="Drawing" style="width: 500px;"/>
 </figure>
-
-**ORB:**
+As shown in the figure above, we do get negative TTC readings from the LiDAR if it is not filtered.
 <figure>
-    <img  src="images/ttc_ORB_HARRIS.png" alt="Drawing" style="width: 500px;"/>
+    <img  src="images/TTC_Filtered_LiDAR.png" alt="Drawing" style="width: 500px;"/>
 </figure>
 
-The reason of so many outliers is due to no enough keypoints been detected within the bounding box. The following shows the matched keypoints from the front car using ORB detector with default setting
-<figure>
-    <img  src="images/ORB_Harris.png" alt="Drawing" style="width: 1000px;"/>
-</figure>
+2. The issue was fixed using Eucledian filtering technique to get more stable TTC readings.
 
-ORB detector has been updated by setting FAST_SCORE to rank feature and set nFeatures to **7000** to increase keypoints 
-```C++
-double detKeypointsORB(std::vector<cv::KeyPoint> &keypoints, cv::Mat &img, bool bVis)
-{
-  int nFeatures = 7000;
-  float scaleFactor = 1.2f;
-  int nLevels = 8;
-  int edgeThreshold = 31;
-  int firstLevel = 0;
-  int WTA_K = 2;
-  int scoreType = ORB::FAST_SCORE;
-
-  cv::Ptr<cv::ORB> detector = cv::ORB::create(nFeatures, scaleFactor, nLevels,edgeThreshold,firstLevel,WTA_K,cv::ORB::FAST_SCORE);
-```
-The following figure shows improved matched keypoints using new feature ranking algorithm
-
-<figure>
-    <img  src="images/ORB_FAST_SCORE.png" alt="Drawing" style="width: 1000px;"/>
-</figure>
-
-For HARRIS detector, the minResponse value is changed from 100 to 80 for NMS algorithm, but the computation time is increased a lot.
-
-#### After improvement:
-Outliers for ORB and HARRIS are both reduced considerably
-
-**HARRIS:**
-<figure>
-    <img  src="images/ttc_Harris_80.png" alt="Drawing" style="width: 500px;"/>
-</figure>
-
-**ORB:**
-
-<figure>
-    <img  src="images/ttc_ORB_FAST_SCORE.png" alt="Drawing" style="width: 500px;"/>
-</figure>
-
-
-#### Camera-based TTC for all other keypoint detectors:
-
-
-<figure>
-    <img  src="images/Camera_based_TTC.png" alt="Drawing" style="width: 1000px;"/>
-</figure>
-
+3. There are still erroneous readings as shown in the figure above.Potentially such issues maybe fixed by more robust statistical filtering and also using a different perspective view.
 
 ---
-## TASK.5 Performance Evaluation of Lidar-based TTC
-
----
-Find examples where the TTC estimate of the Lidar sensor does not seem plausible. Describe your observations and provide a sound argumentation why you think this happened.
-
----
-The following figure shows lidar-based TTC outliers for freame 6 and 7. The cause could be found where the nearest lidar point is located for frame 6 and 7
-
-<figure>
-    <img  src="images/ttc_lidar.png" alt="Drawing" style="width: 500px;"/>
-</figure>
-
-The rear of the preceding vehicle is not flat, different locations have different distance to the lidar sensor, intuitively:
-1. the top-right corner of bump is probably the cloest location to lidar sensor
-2. the bottom part, or the location where car plate is mounted, is most far from the lidar sensor
-
-
-The following 3 figures show the nearest lidar points locations for 3 consecutive frames
-
-The first figure shows the hot lidar point is located at the bumpers top-right corner 
-
-<figure>
-    <img  src="images/img5.png" alt="Drawing" style="width: 1000px;"/>
-</figure>
-
-The second figure shows the hot lidar point is moved to the top of car plate, the depth where plate is mounted makes the predicted car distance bigger than real value, given a smaller TTC (~7S).
-
-<figure>
-    <img  src="images/img6.png" alt="Drawing" style="width: 1000px;"/>
-</figure>
-
-The third figure shows the hot lidar point is still on the top of car plate, the overestimated car distance from the previous frame make the predicted car distance change smaller than the real value, given a bigger TTC (~34S).
-<figure>
-    <img  src="images/img7.png" alt="Drawing" style="width: 1000px;"/>
-</figure>
-
-The above 3 figure shows 3 consecutive nearest lidar point, the hot lidar point is at top-right bumper corner, 
-
----
-## FP.6 : Performance Evaluation Camera-based TTC
+### FP.6 Performance Evaluation 2:
 
 Run several detector / descriptor combinations and look at the differences in TTC estimation. Find out which methods perform best and also include several examples where camera-based TTC estimation is way off. As with Lidar, describe your observations again and also look into potential reasons.
 
 ---
+### Explanation:
+1. As shown in the gif below, a camera LiDAR fusion is performed and Time to Collison (TTC) for both the LiDAR and Camera is calculated. Few things to observe:
 
+<figure>
+    <img  src="images/FinalResultsFast.gif" alt="Drawing" style="width: 500px;"/>
+</figure>
+
+2. Out of all the Detector / Descritor combinations as shown in the image below:
+All the combinations were evaluated frame by frame basis and the best two were chosen that closely relates to the LiDAR based TTC.
+
+<figure>
+    <img  src="images/TTC_Camera_based.png" alt="Drawing" style="width: 500px;"/>
+</figure>
 
 #### Best Camera-based TTC:
 
 
 <figure>
-    <img  src="images/Camera_based_TTC_best.png" alt="Drawing" style="width: 1000px;"/>
+    <img  src="images/shi_and_brief.png" alt="Drawing" style="width: 1000px;"/>
 </figure>
 
-Both HARRIS, ORB and BRISK shows some way-off estimation  as shown in **FP.4**
+<figure>
+    <img  src="images/FAST_and_ORB.png" alt="Drawing" style="width: 1000px;"/>
+</figure>
 
-Lidar-based TTC show comparable performance as camera-based, because lidar sensor directly measure distance
+3. Other than the erroneous reading on frame number 9 for SHITOMASI and BRIEF combination as well as frame 5 for FAST and ORB combination, both resulted in a consistent logical and comparable result as compard to LiDAR based TTC.
+
+4. To conclude, LiDAR-based TTC showed comparable performance as camera-based, because liDAR sensor can directly measure distance very accurately.
